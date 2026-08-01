@@ -1,0 +1,63 @@
+name: 🔥 Автосборка с автоподписью
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: 📥 Клонирование кода
+        uses: actions/checkout@v4
+
+      - name: ☕ Установка Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: 🔑 ГЕНЕРАЦИЯ КЛЮЧА ПОДПИСИ АВТОМАТИЧЕСКИ
+        run: |
+          keytool -genkey -v -keystore app/temp_keystore.jks \
+            -storepass turbo123 -keypass turbo123 \
+            -alias turbotube -keyalg RSA -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=YouTube Turbo, OU=Dev, O=Turbo, L=Moscow, ST=MSK, C=RU"
+
+      - name: 🛠 Сборка APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: ✍️ ПОДПИСЬ APK (автоматический ключ)
+        run: |
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore app/temp_keystore.jks \
+            -storepass turbo123 -keypass turbo123 \
+            app/build/outputs/apk/release/app-release-unsigned.apk turbotube
+
+      - name: 📦 ВЫРАВНИВАНИЕ (zipalign)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y android-sdk-build-tools
+          zipalign -v -p 4 \
+            app/build/outputs/apk/release/app-release-unsigned.apk \
+            app/build/outputs/apk/release/YouTubeTurbo_Signed.apk
+
+      - name: 📤 ЗАГРУЗКА ГОТОВОГО APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 🚀-YouTubeTurbo-Подписан
+          path: app/build/outputs/apk/release/YouTubeTurbo_Signed.apk
+          retention-days: 30
+
+      - name: ✅ Готово! Иди в Actions и качай
+        run: |
+          echo "🎉 Сборка завершена! APK подписан автоматически."
+          echo "📱 Скачай в разделе Actions -> Artifacts"
